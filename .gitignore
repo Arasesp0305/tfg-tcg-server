@@ -1,0 +1,12 @@
+target/
+.idea/
+*.iml
+.vscode/
+
+# Firebase credentials
+src/main/resources/firebase/*.json
+!src/main/resources/firebase/service-account.example.json
+
+# Local environment files
+.env
+*.log
