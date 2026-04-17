@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TCG Login</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f7fb;
+            color: #172033;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        main {
+            width: min(100%, 420px);
+            background: #ffffff;
+            border: 1px solid #d9e1ee;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 16px 40px rgba(23, 32, 51, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+            line-height: 1.15;
+        }
+
+        p {
+            margin: 0 0 22px;
+            color: #5c677d;
+            line-height: 1.45;
+        }
+
+        label {
+            display: grid;
+            gap: 7px;
+            margin-bottom: 14px;
+            color: #2a354a;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        input {
+            width: 100%;
+            border: 1px solid #bdc8da;
+            border-radius: 6px;
+            padding: 12px;
+            font: inherit;
+            color: #172033;
+            background: #ffffff;
+        }
+
+        input:focus {
+            border-color: #1b66d2;
+            outline: 3px solid rgba(27, 102, 210, 0.18);
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 6px;
+            padding: 12px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #1b66d2;
+            color: white;
+        }
+
+        button.secondary {
+            background: #e8eef7;
+            color: #172033;
+        }
+
+        pre {
+            margin: 18px 0 0;
+            min-height: 96px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #101828;
+            color: #e6edf7;
+            border-radius: 6px;
+            padding: 14px;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Acceso TCG</h1>
+    <p>Cuenta de jugador para entrar al servidor.</p>
+
+    <label>
+        Email
+        <input id="email" type="email" autocomplete="email" placeholder="jugador@ejemplo.com">
+    </label>
+
+    <label>
+        Password
+        <input id="password" type="password" autocomplete="current-password" placeholder="Minimo 6 caracteres">
+    </label>
+
+    <div class="actions">
+        <button class="secondary" id="registerButton" type="button">Registrarse</button>
+        <button class="primary" id="loginButton" type="button">Entrar</button>
+    </div>
+
+    <pre id="result">Esperando accion...</pre>
+</main>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import {
+        createUserWithEmailAndPassword,
+        getAuth,
+        signInWithEmailAndPassword
+    } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBwqrXLSqDdOLKGW-mh1e6Xbkc1YQjjeT4",
+        authDomain: "online-tcg-arasesp.firebaseapp.com",
+        databaseURL: "https://online-tcg-arasesp-default-rtdb.europe-west1.firebasedatabase.app/",
+        projectId: "online-tcg-arasesp"
+    };
+
+    const result = document.getElementById("result");
+    const email = document.getElementById("email");
+    const password = document.getElementById("password");
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    document.getElementById("registerButton").addEventListener("click", () => authenticate("register"));
+    document.getElementById("loginButton").addEventListener("click", () => authenticate("login"));
+
+    async function authenticate(mode) {
+        result.textContent = "Conectando con Firebase...";
+
+        try {
+            if (firebaseConfig.apiKey === "PEGA_AQUI_TU_WEB_API_KEY") {
+                throw new Error("Falta pegar la apiKey de la aplicacion web de Firebase en login.html");
+            }
+
+            const credentials = mode === "register"
+                ? await createUserWithEmailAndPassword(auth, email.value, password.value)
+                : await signInWithEmailAndPassword(auth, email.value, password.value);
+
+            const idToken = await credentials.user.getIdToken();
+            const authResponse = await fetch("/api/auth/verify", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ idToken })
+            });
+
+            const serverResponse = await authResponse.json();
+            const profileResponse = mode === "register"
+                ? await createUserProfile(credentials.user, idToken)
+                : null;
+
+            result.textContent = JSON.stringify({
+                firebaseUser: {
+                    uid: credentials.user.uid,
+                    email: credentials.user.email,
+                    idToken
+                },
+                serverResponse,
+                profileResponse
+            }, null, 2);
+        } catch (error) {
+            result.textContent = `${error.code ?? "error"}\n${error.message}`;
+        }
+    }
+
+    async function createUserProfile(user, idToken) {
+        const username = user.email.split("@")[0];
+        const response = await fetch("/api/users", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${idToken}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                uid: user.uid,
+                username,
+                email: user.email
+            })
+        });
+
+        return {
+            status: response.status,
+            ok: response.ok,
+            body: await response.json()
+        };
+    }
+</script>
+</body>
+</html>
