@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TCG Dev Panel</title>
+    <style>
+        :root {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #182235;
+            background: #f3f6fa;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid #d8e0ec;
+            padding: 18px 24px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            color: #5d687a;
+        }
+
+        main {
+            width: min(1180px, 100%);
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        section {
+            background: #ffffff;
+            border: 1px solid #d8e0ec;
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        section.output {
+            grid-column: 1 / -1;
+        }
+
+        h2 {
+            margin: 0 0 14px;
+            font-size: 18px;
+        }
+
+        label {
+            display: grid;
+            gap: 6px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #344056;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            border: 1px solid #bdc7d8;
+            border-radius: 6px;
+            padding: 10px;
+            font: inherit;
+            color: #182235;
+            background: #ffffff;
+        }
+
+        textarea {
+            min-height: 82px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: #276bd8;
+            outline: 3px solid rgba(39, 107, 216, 0.16);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font: inherit;
+            font-weight: 700;
+            color: #ffffff;
+            background: #276bd8;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            color: #182235;
+            background: #e8eef7;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+
+        pre {
+            margin: 0;
+            min-height: 220px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #101828;
+            color: #e7edf7;
+            border-radius: 6px;
+            padding: 14px;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        @media (max-width: 820px) {
+            main {
+                grid-template-columns: 1fr;
+                padding: 16px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>TCG Dev Panel</h1>
+    <p>Panel local para probar endpoints del servidor durante el desarrollo.</p>
+</header>
+
+<main>
+    <section>
+        <h2>Perfil de usuario</h2>
+        <label>
+            Firebase ID Token
+            <textarea id="firebaseToken" placeholder="Pega aqui el token de Firebase Auth"></textarea>
+        </label>
+        <label>
+            UID de Firebase
+            <input id="uid" placeholder="Uz7yw3OeFjhCS2z3masM4RWanxc2">
+        </label>
+        <div class="grid">
+            <label>
+                Username
+                <input id="username" value="TestPlayer">
+            </label>
+            <label>
+                Email
+                <input id="email" type="email" value="test@test.es">
+            </label>
+        </div>
+        <div class="actions">
+            <button type="button" id="createUserButton">Crear perfil</button>
+            <button type="button" id="getUserButton" class="secondary">Consultar perfil</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Matchmaking</h2>
+        <label>
+            Player ID
+            <input id="matchPlayerId" placeholder="UID del jugador">
+        </label>
+        <div class="grid">
+            <label>
+                Deck ID
+                <input id="matchDeckId" value="deck_001">
+            </label>
+            <label>
+                MMR
+                <input id="matchMmr" type="number" min="0" value="0">
+            </label>
+        </div>
+        <div class="actions">
+            <button type="button" id="findMatchButton">Buscar partida</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Compras</h2>
+        <div class="grid">
+            <label>
+                Item ID
+                <input id="purchaseItemId" value="pack_basic_001">
+            </label>
+            <label>
+                Nombre del item
+                <input id="purchaseItemName" value="Sobre basico">
+            </label>
+        </div>
+        <label>
+            Coste en monedas
+            <input id="purchaseCoinAmount" type="number" min="1" value="100">
+        </label>
+        <label>
+            Descripcion
+            <input id="purchaseDescription" value="Compra de un sobre basico">
+        </label>
+        <div class="actions">
+            <button type="button" id="createPurchaseButton">Registrar compra</button>
+            <button type="button" id="getPurchasesButton" class="secondary">Consultar historial</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Tienda</h2>
+        <label>
+            Pack ID
+            <input id="shopPackId" value="pack_basic_001">
+        </label>
+        <div class="actions">
+            <button type="button" id="getPacksButton">Listar sobres</button>
+            <button type="button" id="openPackButton" class="secondary">Comprar y abrir sobre</button>
+            <button type="button" id="getCollectionButton" class="secondary">Consultar coleccion</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Cartas</h2>
+        <label>
+            Card ID
+            <input id="cardId" value="card_fireball">
+        </label>
+        <div class="actions">
+            <button type="button" id="getCardsButton">Listar cartas</button>
+            <button type="button" id="getCardButton" class="secondary">Consultar carta</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Mazos</h2>
+        <label>
+            Deck ID
+            <input id="deckId" value="deck_001">
+        </label>
+        <div class="actions">
+            <button type="button" id="getDecksButton">Listar mazos</button>
+            <button type="button" id="getDeckButton" class="secondary">Consultar mazo</button>
+            <button type="button" id="selectDeckButton" class="secondary">Seleccionar mazo</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Partida</h2>
+        <label>
+            Game ID
+            <input id="gameId" placeholder="game_...">
+        </label>
+        <label>
+            Player ID para seleccion
+            <input id="creaturePlayerId" placeholder="UID del jugador">
+        </label>
+        <div class="grid">
+            <label>
+                Criatura activa 1
+                <input id="activeCreature1" value="card_fire_dragon">
+            </label>
+            <label>
+                Criatura activa 2
+                <input id="activeCreature2" value="card_water_guardian">
+            </label>
+        </div>
+        <label>
+            Criatura oculta
+            <input id="hiddenCreature" value="card_stone_titan">
+        </label>
+        <div class="actions">
+            <button type="button" id="selectCreaturesButton">Seleccionar criaturas</button>
+        </div>
+        <div class="actions">
+            <button type="button" id="getGameButton">Consultar partida</button>
+        </div>
+        <label>
+            Winner ID
+            <input id="winnerId" placeholder="UID del ganador">
+        </label>
+        <div class="actions">
+            <button type="button" id="finishGameButton" class="secondary">Guardar en historico</button>
+        </div>
+    </section>
+
+    <section>
+        <h2>Movimiento</h2>
+        <label>
+            Game ID
+            <input id="moveGameId" placeholder="game_...">
+        </label>
+        <div class="grid">
+            <label>
+                Player ID
+                <input id="movePlayerId" placeholder="UID del jugador">
+            </label>
+            <label>
+                Tipo
+                <select id="moveType">
+                    <option value="PLAY_ACTION">PLAY_ACTION</option>
+                    <option value="CHANGE_CREATURE">CHANGE_CREATURE</option>
+                    <option value="SURRENDER">SURRENDER</option>
+                </select>
+            </label>
+        </div>
+        <label>
+            Card ID
+            <input id="moveCardId" value="card_fire_dragon">
+        </label>
+        <div class="grid">
+            <label>
+                Source Field Card ID
+                <input id="sourceFieldCardId" placeholder="Opcional">
+            </label>
+            <label>
+                Target Field Card ID
+                <input id="targetFieldCardId" placeholder="Opcional">
+            </label>
+        </div>
+        <div class="actions">
+            <button type="button" id="submitMoveButton">Enviar movimiento</button>
+        </div>
+    </section>
+
+    <section class="output">
+        <h2>Resultado</h2>
+        <pre id="result">Esperando accion...</pre>
+    </section>
+</main>
+
+<script>
+    const result = document.getElementById("result");
+    const firebaseToken = document.getElementById("firebaseToken");
+
+    const uid = document.getElementById("uid");
+    const matchPlayerId = document.getElementById("matchPlayerId");
+    const movePlayerId = document.getElementById("movePlayerId");
+    const creaturePlayerId = document.getElementById("creaturePlayerId");
+    const gameId = document.getElementById("gameId");
+    const moveGameId = document.getElementById("moveGameId");
+    const winnerId = document.getElementById("winnerId");
+
+    uid.addEventListener("input", () => {
+        matchPlayerId.value = uid.value;
+        movePlayerId.value = uid.value;
+        creaturePlayerId.value = uid.value;
+        winnerId.value = uid.value;
+    });
+
+    gameId.addEventListener("input", () => {
+        moveGameId.value = gameId.value;
+    });
+
+    document.getElementById("createUserButton").addEventListener("click", async () => {
+        await requestJson("/api/users", {
+            method: "POST",
+            body: {
+                uid: uid.value,
+                username: document.getElementById("username").value,
+                email: document.getElementById("email").value
+            }
+        });
+    });
+
+    document.getElementById("getUserButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}`);
+    });
+
+    document.getElementById("createPurchaseButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/purchases`, {
+            method: "POST",
+            body: {
+                itemId: document.getElementById("purchaseItemId").value,
+                itemName: document.getElementById("purchaseItemName").value,
+                coinAmount: Number(document.getElementById("purchaseCoinAmount").value),
+                description: document.getElementById("purchaseDescription").value
+            }
+        });
+    });
+
+    document.getElementById("getPurchasesButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/purchases`);
+    });
+
+    document.getElementById("getPacksButton").addEventListener("click", async () => {
+        await requestJson("/api/shop/packs");
+    });
+
+    document.getElementById("openPackButton").addEventListener("click", async () => {
+        await requestJson(`/api/shop/packs/${encodeURIComponent(document.getElementById("shopPackId").value)}/open`, {
+            method: "POST",
+            body: {
+                uid: uid.value
+            }
+        });
+    });
+
+    document.getElementById("getCollectionButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/collection`);
+    });
+
+    document.getElementById("findMatchButton").addEventListener("click", async () => {
+        const response = await requestJson("/api/matchmaking/find", {
+            method: "POST",
+            body: {
+                playerId: matchPlayerId.value,
+                deckId: document.getElementById("matchDeckId").value,
+                mmr: Number(document.getElementById("matchMmr").value)
+            }
+        });
+
+        if (response?.gameId) {
+            gameId.value = response.gameId;
+            moveGameId.value = response.gameId;
+        }
+    });
+
+    document.getElementById("getCardsButton").addEventListener("click", async () => {
+        await requestJson("/api/cards");
+    });
+
+    document.getElementById("getCardButton").addEventListener("click", async () => {
+        await requestJson(`/api/cards/${encodeURIComponent(document.getElementById("cardId").value)}`);
+    });
+
+    document.getElementById("getDecksButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/decks`);
+    });
+
+    document.getElementById("getDeckButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/decks/${encodeURIComponent(document.getElementById("deckId").value)}`);
+    });
+
+    document.getElementById("selectDeckButton").addEventListener("click", async () => {
+        await requestJson(`/api/users/${encodeURIComponent(uid.value)}/decks/${encodeURIComponent(document.getElementById("deckId").value)}/select`, {
+            method: "POST"
+        });
+    });
+
+    document.getElementById("getGameButton").addEventListener("click", async () => {
+        await requestJson(`/api/games/${encodeURIComponent(gameId.value)}`);
+    });
+
+    document.getElementById("selectCreaturesButton").addEventListener("click", async () => {
+        await requestJson(`/api/games/${encodeURIComponent(gameId.value)}/creatures`, {
+            method: "POST",
+            body: {
+                playerId: creaturePlayerId.value,
+                activeCreatureCardIds: [
+                    document.getElementById("activeCreature1").value,
+                    document.getElementById("activeCreature2").value
+                ],
+                hiddenCreatureCardId: document.getElementById("hiddenCreature").value
+            }
+        });
+    });
+
+    document.getElementById("finishGameButton").addEventListener("click", async () => {
+        await requestJson(`/api/games/${encodeURIComponent(gameId.value)}/finish`, {
+            method: "POST",
+            body: {
+                winnerId: emptyToNull(winnerId.value)
+            }
+        });
+    });
+
+    document.getElementById("submitMoveButton").addEventListener("click", async () => {
+        await requestJson(`/api/games/${encodeURIComponent(moveGameId.value)}/moves`, {
+            method: "POST",
+            body: {
+                playerId: movePlayerId.value,
+                type: document.getElementById("moveType").value,
+                cardId: emptyToNull(document.getElementById("moveCardId").value),
+                sourceFieldCardId: emptyToNull(document.getElementById("sourceFieldCardId").value),
+                targetFieldCardId: emptyToNull(document.getElementById("targetFieldCardId").value)
+            }
+        });
+    });
+
+    async function requestJson(path, options = {}) {
+        const method = options.method ?? "GET";
+        const fetchOptions = {
+            method,
+            headers: {
+                "Content-Type": "application/json"
+            }
+        };
+
+        if (firebaseToken.value.trim() !== "") {
+            fetchOptions.headers.Authorization = `Bearer ${firebaseToken.value.trim()}`;
+        }
+
+        if (options.body) {
+            fetchOptions.body = JSON.stringify(options.body);
+        }
+
+        render({
+            request: {
+                method,
+                path,
+                body: options.body ?? null
+            },
+            status: "Enviando..."
+        });
+
+        try {
+            const response = await fetch(path, fetchOptions);
+            const text = await response.text();
+            const payload = text ? JSON.parse(text) : null;
+
+            render({
+                request: {
+                    method,
+                    path,
+                    body: options.body ?? null
+                },
+                response: {
+                    status: response.status,
+                    ok: response.ok,
+                    body: payload
+                }
+            });
+
+            return payload;
+        } catch (error) {
+            render({
+                request: {
+                    method,
+                    path,
+                    body: options.body ?? null
+                },
+                error: error.message
+            });
+
+            return null;
+        }
+    }
+
+    function emptyToNull(value) {
+        return value.trim() === "" ? null : value;
+    }
+
+    function render(value) {
+        result.textContent = JSON.stringify(value, null, 2);
+    }
+</script>
+</body>
+</html>
