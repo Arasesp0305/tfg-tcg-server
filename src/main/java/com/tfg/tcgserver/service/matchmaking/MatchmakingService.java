@@ -2,6 +2,7 @@ package com.tfg.tcgserver.service.matchmaking;
 
 import com.tfg.tcgserver.matchmaking.MatchmakingEntry;
 import com.tfg.tcgserver.matchmaking.MatchmakingQueue;
+import com.tfg.tcgserver.models.rules.GameRules;
 import com.tfg.tcgserver.service.game.GameService;
 import org.springframework.stereotype.Service;
 
@@ -30,7 +31,10 @@ public class MatchmakingService {
         Optional<MatchmakingEntry> opponent = matchmakingQueue.findOpponentFor(player);
 
         if (opponent.isEmpty()) {
-            return CompletableFuture.completedFuture(MatchmakingResult.waiting(matchmakingQueue.size()));
+            return matchmakingQueue.awaitMatch(playerId, GameRules.LONG_POLL_TIMEOUT_MS)
+                    .thenApply(gameId -> gameId != null
+                            ? MatchmakingResult.matched(gameId)
+                            : MatchmakingResult.waiting(matchmakingQueue.size()));
         }
 
         MatchmakingEntry matchedOpponent = opponent.get();

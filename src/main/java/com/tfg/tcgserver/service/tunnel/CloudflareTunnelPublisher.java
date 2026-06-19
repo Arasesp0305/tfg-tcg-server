@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -53,8 +54,51 @@ public class CloudflareTunnelPublisher {
             return;
         }
 
+        killStaleCloudflaredProcesses();
         executorService.submit(this::startTunnelAndPublishUrl);
         Runtime.getRuntime().addShutdownHook(new Thread(this::stopTunnel));
+    }
+
+    /**
+     * Si una ejecucion anterior murio sin pasar por el shutdown hook (kill forzado,
+     * cierre de consola, debug stop), el proceso cloudflared anterior queda huerfano
+     * ocupando el tunel. Lo matamos antes de lanzar uno nuevo.
+     */
+    private void killStaleCloudflaredProcesses() {
+        String processName = extractProcessName(cloudflaredCommand);
+
+        try {
+            ProcessBuilder killer = isWindows()
+                    ? new ProcessBuilder("taskkill", "/F", "/IM", processName)
+                    : new ProcessBuilder("pkill", "-f", processName);
+
+            killer.redirectErrorStream(true);
+            Process process = killer.start();
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                while (reader.readLine() != null) {
+                    // descarta salida del comando de limpieza
+                }
+            }
+
+            process.waitFor();
+        } catch (IOException | InterruptedException exception) {
+            LOGGER.debug("No se pudo limpiar procesos cloudflared previos (puede que no hubiera ninguno)", exception);
+        }
+    }
+
+    private String extractProcessName(String command) {
+        String fileName = Paths.get(command).getFileName().toString();
+
+        if (isWindows() && !fileName.toLowerCase().endsWith(".exe")) {
+            return fileName + ".exe";
+        }
+
+        return fileName;
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 
     private void startTunnelAndPublishUrl() {
@@ -116,6 +160,7 @@ public class CloudflareTunnelPublisher {
 
         if (tunnelProcess != null && tunnelProcess.isAlive()) {
             tunnelProcess.destroy();
+            tunnelProcess.descendants().forEach(ProcessHandle::destroy);
         }
     }
 }

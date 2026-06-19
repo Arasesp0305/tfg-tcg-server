@@ -11,5 +11,6 @@ public class TcgServerApplication {
     public static void main(String[] args) {
         SpringApplication.run(TcgServerApplication.class, args);
     }
+    
 }
  

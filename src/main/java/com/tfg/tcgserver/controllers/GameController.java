@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -32,8 +33,11 @@ public class GameController extends AuthenticatedController {
     }
 
     @GetMapping("/{gameId}")
-    public CompletableFuture<Game> getGame(@PathVariable("gameId") String gameId) {
-        return gameService.getGame(gameId);
+    public CompletableFuture<Game> getGame(
+            @PathVariable("gameId") String gameId,
+            @RequestParam(value = "since", required = false) Long since
+    ) {
+        return gameService.getGame(gameId, since);
     }
 
     @GetMapping("/history/{gameId}")

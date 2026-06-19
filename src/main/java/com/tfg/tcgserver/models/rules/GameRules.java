@@ -9,6 +9,7 @@ public final class GameRules {
     public static final int ACTIVE_CREATURES_PER_PLAYER = 2;
     public static final int HIDDEN_CREATURES_PER_PLAYER = 1;
     public static final int DEAD_CREATURES_TO_LOSE = 3;
+    public static final long LONG_POLL_TIMEOUT_MS = 25_000;
 
     private GameRules() {
     }

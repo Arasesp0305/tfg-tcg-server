@@ -16,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 public class PlayerService {
 
     private static final String INITIAL_ELO_ID = "bronze";
+    private static final String DEFAULT_AVATAR_ID = "avatar_1";
 
     private final UserProfileRepository userProfileRepository;
 
@@ -36,11 +37,30 @@ public class PlayerService {
         profile.setCoins(0);
         profile.setMmr(0);
         profile.setEloId(INITIAL_ELO_ID);
+        profile.setAvatarId(DEFAULT_AVATAR_ID);
         profile.setCreatedAt(now);
         profile.setUpdatedAt(now);
 
         return userProfileRepository.save(uid, profile)
                 .thenApply(ignored -> profile);
+    }
+
+    public CompletableFuture<UserProfile> updateProfile(String uid, String username, String avatarId) {
+        return userProfileRepository.findById(uid)
+                .thenCompose(profile -> {
+                    if (profile == null) {
+                        CompletableFuture<UserProfile> failed = new CompletableFuture<>();
+                        failed.completeExceptionally(new IllegalArgumentException("No existe el perfil del usuario"));
+                        return failed;
+                    }
+
+                    profile.setUsername(username);
+                    profile.setAvatarId(avatarId);
+                    profile.setUpdatedAt(Instant.now().toString());
+
+                    return userProfileRepository.save(uid, profile)
+                            .thenApply(ignored -> profile);
+                });
     }
 
     public CompletableFuture<Map<String, PurchaseTransaction>> getPurchaseHistory(String uid) {

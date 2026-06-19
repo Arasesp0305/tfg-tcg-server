@@ -1,5 +1,6 @@
 package com.tfg.tcgserver.service.game;
 
+import com.tfg.tcgserver.api.dto.GameSummaryResponse;
 import com.tfg.tcgserver.models.cards.Card;
 import com.tfg.tcgserver.models.cards.CardEffect;
 import com.tfg.tcgserver.models.game.CreatureSelection;
@@ -26,6 +27,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -46,13 +48,63 @@ public class GameService {
     }
 
     public CompletableFuture<Game> getGame(String gameId) {
-        return activeGameStore.findById(gameId)
-                .map(CompletableFuture::completedFuture)
-                .orElseGet(() -> gameRepository.findById(gameId));
+        return getGame(gameId, null);
+    }
+
+    /**
+     * Si {@code since} coincide con la version actual de la partida activa, espera (long polling)
+     * hasta que cambie o hasta el timeout antes de responder. Si la partida no esta activa
+     * (no encontrada o ya finalizada), responde de inmediato desde el historico.
+     */
+    public CompletableFuture<Game> getGame(String gameId, Long since) {
+        Optional<Game> active = activeGameStore.findById(gameId);
+
+        if (active.isEmpty()) {
+            return gameRepository.findById(gameId);
+        }
+
+        long currentVersion = active.get().getVersion();
+        if (since == null || since != currentVersion) {
+            return CompletableFuture.completedFuture(active.get());
+        }
+
+        return activeGameStore.awaitVersionChange(gameId, since, GameRules.LONG_POLL_TIMEOUT_MS)
+                .thenCompose(ignored -> getGame(gameId, null));
     }
 
     public CompletableFuture<Game> getFinishedGame(String gameId) {
         return gameRepository.findById(gameId);
+    }
+
+    public CompletableFuture<List<GameSummaryResponse>> getGamesForPlayer(String uid) {
+        return gameRepository.findAll().thenApply(allGames -> {
+            if (allGames == null) {
+                return List.of();
+            }
+
+            return allGames.entrySet().stream()
+                    .filter(entry -> uid.equals(entry.getValue().getPlayer1Id())
+                            || uid.equals(entry.getValue().getPlayer2Id()))
+                    .map(entry -> toSummary(entry.getKey(), entry.getValue(), uid))
+                    .sorted(Comparator.comparing(GameSummaryResponse::createdAt).reversed())
+                    .toList();
+        });
+    }
+
+    private GameSummaryResponse toSummary(String gameId, Game game, String uid) {
+        String opponentId = uid.equals(game.getPlayer1Id()) ? game.getPlayer2Id() : game.getPlayer1Id();
+
+        return new GameSummaryResponse(
+                gameId,
+                game.getStatus(),
+                game.getCreatedAt(),
+                game.getStartedAt(),
+                game.getFinishedAt(),
+                game.getPlayer1Id(),
+                game.getPlayer2Id(),
+                game.getWinnerId(),
+                opponentId
+        );
     }
 
     public CompletableFuture<String> createGame(String player1Id, String player1DeckId, String player2Id, String player2DeckId) {
@@ -211,17 +263,27 @@ public class GameService {
             move.setResolvedOrder(order++);
             turn.getResolvedMoves().put("resolved_move_" + move.getResolvedOrder(), move);
 
+            FieldCard target = turn.getFieldCards().get(move.getTargetFieldCardId());
+            if (target != null) {
+                move.setTargetHealthBefore(target.getCurrentHealth());
+                move.setTargetStatusBefore(target.getStatus().name());
+                move.setTargetHealthAfter(target.getCurrentHealth());
+                move.setTargetStatusAfter(target.getStatus().name());
+            }
+
+            FieldCard source = turn.getFieldCards().get(move.getSourceFieldCardId());
+            if (source == null || source.getStatus() == FieldCardStatus.DEAD) {
+                // Source creature died earlier this turn: its action does not occur
+                continue;
+            }
+
             Card actionCard = catalog.get(move.getCardId());
-            if (actionCard == null || actionCard.getEffect() == null) {
+            if (actionCard == null || actionCard.getEffect() == null || target == null
+                    || target.getStatus() == FieldCardStatus.DEAD) {
                 continue;
             }
 
             CardEffect effect = actionCard.getEffect();
-            FieldCard target = turn.getFieldCards().get(move.getTargetFieldCardId());
-
-            if (target == null || target.getStatus() == FieldCardStatus.DEAD) {
-                continue;
-            }
 
             int newHealth = target.getCurrentHealth() - effect.getDamage();
             // Cap heals at max health
@@ -234,6 +296,9 @@ public class GameService {
                 ownerState.setDeadCreatures(ownerState.getDeadCreatures() + 1);
                 promoteBenchCreature(turn, target.getOwnerId());
             }
+
+            move.setTargetHealthAfter(target.getCurrentHealth());
+            move.setTargetStatusAfter(target.getStatus().name());
         }
 
         turn.setEndedAt(Instant.now().toString());

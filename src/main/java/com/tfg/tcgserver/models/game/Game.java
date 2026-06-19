@@ -16,6 +16,7 @@ public class Game {
     private Map<String, GamePlayerState> players = new HashMap<>();
     private Map<String, CreatureSelection> creatureSelections = new HashMap<>();
     private Map<String, Turn> turns = new HashMap<>();
+    private long version;
 
     public Game() {
     }
@@ -106,5 +107,13 @@ public class Game {
 
     public void setTurns(Map<String, Turn> turns) {
         this.turns = turns;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
     }
 }

@@ -1,6 +1,6 @@
 # Memoria del proyecto TFG TCG
 
-Ultima actualizacion: 2026-05-20
+Ultima actualizacion: 2026-06-19
 
 ## Idea general
 
@@ -1476,3 +1476,368 @@ Se rediseno la UI de partida para separar la mano del tablero y hacer la selecci
   - Oculto cuando no hay seleccion pendiente.
 - `addBoardSection` recibe nuevo parametro `boolean isMySection`.
 - Gestion de visibilidad de secciones centralizada en `renderGame()` segun estado.
+
+### 2026-06-07 - Listado de cartas (coleccion) en 3 columnas con formato de mano
+
+`CollectionFragment.java`: `renderCollection()` ahora reparte las cartas en filas de `CARDS_PER_ROW = 3` (LinearLayout horizontal con `weightSum`), usando filler invisible para completar la ultima fila incompleta. `createCardView()` reescrito para usar el mismo formato visual que las cartas de la mano en partida (`createHandCardView` en `GameFragment`): panel vertical con `info_panel_background`, padding 12, nombre en negrita blanco tamano 12 ("Nombre xCantidad") y descripcion (tipo + texto) en gris tamano 10. Nuevo helper `createCardRow()` / `createRowFiller()`.
+
+### 2026-06-07 (2) - Cartas de coleccion: tamano fijo, proporcion real, texto truncado con "..."
+
+`CollectionFragment.java`: `createCardView()` ahora envuelve el panel en un `FrameLayout` de tamano fijo `CARD_WIDTH_DP=100` x `CARD_HEIGHT_DP=140` (ratio 5:7, proporcion de carta de coleccionable real ~63x88mm), centrado dentro de la celda de la fila (weight=1) -> todas las cartas miden igual independientemente del texto. Nombre con `maxLines(2)` y descripcion con `maxLines(6)`, ambos `setEllipsize(TextUtils.TruncateAt.END)`: si el texto no cabe se corta y anade "...". Nuevo helper `dpToPx()`.
+
+### 2026-06-07 (3) - Fix: error 400 "No existe perfil de usuario" al comprar sobre la primera vez
+
+**Causa:** `UserProfileRepository.registerPurchase()` lanzaba `runTransaction()` directamente sobre `users/{uid}`. La primera vez que esa ruta se usa, la cache local del SDK Firebase aun no esta sincronizada y `doTransaction` recibe `currentData.getValue() == null` aunque el perfil exista en el servidor -> el codigo lo trataba como "perfil inexistente" y abortaba con 400. La segunda pulsacion ya funcionaba porque la cache quedaba poblada tras el primer intento.
+
+**Fix:** antes de iniciar la transaccion, se hace una lectura previa con `findById(uid)` (pobla la cache via listener single-value) y solo si el perfil de verdad no existe se falla con `IllegalArgumentException`. La transaccion (renombrada a `runPurchaseTransaction`) ya recibe `currentData` sincronizado en el primer intento.
+
+### 2026-06-07 (4) - Decision de tipografia/tamanos/colores global (coherente con paneles navy + dorado)
+
+Se formalizo un sistema tipografico+color en `colors.xml`/`themes.xml` basado en la paleta ya presente (navy #101828/#172033/#0D1520, dorado #C9A84C, blanco translucido):
+- **Fuentes** (familias del sistema, sin assets nuevos): `serif` (Noto Serif, negrita, dorado) para titulos/cabeceras/nombres de carta -> look "grabado" acorde a la estetica TCG; `sans-serif-condensed` para cuerpo/captions/botones -> compacto y legible en paneles pequenos.
+- **Tamanos**: titulo pantalla 28sp, cabecera seccion 18sp, cuerpo 15sp, captions/stats 12sp, boton 16sp.
+- **Colores nuevos** en `colors.xml`: `navy_deepest/navy_dark/navy`, `gold`, `ink/ink_soft/ink_muted`.
+- `themes.xml`: defino `TextAppearance.TFGGame.{Title,Heading,Body,Caption}` y `Widget.TFGGame.Button` (dorado sobre navy_deepest, condensed medium, sin mayusculas forzadas), enlazados como defaults del Material3 theme (`textAppearanceHeadlineMedium`, `materialButtonStyle`, etc) -> toda pantalla nueva hereda el estilo sin tocarla.
+- Se elimino `values-night/themes.xml` (la app es oscura por diseno; sin esa variante, Android usa siempre `values/themes.xml` en modo dia y noche).
+
+### 2026-06-07 (5) - Fix: tipografia se veia "blanca, igual en todo, estirada verticalmente"
+
+**Causa:** el `android:fontFamily="sans-serif-condensed"` puesto en `Base.Theme.TFGGame` se filtraba a TODOS los TextView/Button (la app construye casi toda su UI con colores/tamanos fijos en XML o `setTextColor`/`setTypeface` en codigo, que no tocan `fontFamily`). Resultado: todo el texto paso a usar la misma fuente condensada (glifos mas estrechos = look "estirado verticalmente"), mientras que el color seguia siendo el blanco hardcodeado de siempre -> el cambio de tipografia/color "no se veia" donde se queria (titulos) y SI se notaba donde no se queria (todo lo demas).
+
+**Fix:** se quito `android:fontFamily` y los mapeos `textAppearance*`/`materialButtonStyle` del theme base (no llegan a vistas con estilo explicito de todos modos). Las decisiones de [[fuente/color/tamano]] se aplican ahora elemento a elemento donde corresponde: los 6 titulos de pantalla (`activity_collection`, `activity_shop`, `fragment_home_menu`, `activity_login`, `activity_register`, `activity_main`) pasan a `android:fontFamily="serif"` + `android:textColor="@color/gold"`; `subtitleText` de `activity_main` a `sans-serif-condensed` + `@color/ink_soft`. Los estilos `TextAppearance.TFGGame.*`/`Widget.TFGGame.Button` quedan definidos en `themes.xml` para referenciarlos explicitamente donde se necesite, pero ya no se enlazan globalmente.
+
+### 2026-06-07 (6) - Logo, splash screen y barras de texto con assets nuevos (logo.png, textbar.png)
+
+**Icono de escritorio:** `AndroidManifest.xml` `<application>` -> `android:icon`/`android:roundIcon` cambiados de `@mipmap/ic_launcher*` a `@drawable/logo` (PNG circular "Chronicle Realms"). Se omite el sistema de adaptive icon (mipmap-anydpi/ic_launcher.xml) porque el logo ya trae su propio fondo circular.
+
+**Pantalla de carga:** nuevo drawable `splash_screen.xml` (layer-list: `background_2` + `logo` 220dp centrado) y estilo `Theme.TFGGame.Splash` (extiende `Theme.TFGGame`, solo cambia `android:windowBackground`). `MainActivity` declarada en el manifest con ese theme -> se ve desde el instante de arranque (antes de inflar nada) y permanece visible durante `FirebaseInitializer.initialize` + `BackendConfig.refresh` porque es simplemente el windowBackground de la Activity hasta que `continueStartup()` llama a `setContentView`. No hizo falta tocar `MainActivity.java`.
+
+**Cuadros de texto (login/register):** `emailInput`/`passwordInput` en `activity_login.xml` y `activity_register.xml`: `android:background` cambiado de `@drawable/auth_input_background` (placa blanca) a `@drawable/textbar` (plantilla con marco dorado), + `paddingHorizontal=22dp` para no pisar el marco ornamentado, texto escrito en `@color/gold` con `sans-serif-condensed` (decision tipografica de [[2026-06-07 (4)]]) y hint en `@color/ink_muted`. `auth_input_background` se mantiene (sigue usandose en `activity_deck_builder.xml`).
+
+### 2026-06-07 (7) - Ajustes: icono transparente, splash sin logo-estirado, barras menos finas
+
+**Logo transparente en escritorio:** revertido `android:icon`/`android:roundIcon` a `@mipmap/ic_launcher*` (adaptive icon) -- usar `@drawable/logo` crudo como icono de app rompia el splash de Android 12+ (ver abajo). Nuevo `ic_launcher_logo_foreground.xml` (`<inset>` del logo al 22% por lado, para caer en la zona segura ~66% del adaptive icon) y `mipmap-anydpi/ic_launcher{,_round}.xml` ahora usan `background = @android:color/transparent` + ese foreground -> el logo se ve sin caja/fondo solido detras, solo su propio circulo.
+
+**Splash "logo de fondo" -> causa real:** en Android 12+ el sistema SIEMPRE pinta su propio splash al arrancar (no se puede sustituir por un drawable cualquiera; su `windowSplashScreenBackground` solo admite color solido, nunca una imagen) y por defecto usa el `android:icon` de la app. Al haberlo puesto a `logo.png` crudo (1254x1254, sin recorte de zona segura), el sistema lo escalaba/estiraba a pantalla completa -> parecia "el logo es el fondo". Fix: `Theme.TFGGame.Splash` ahora define explicitamente `windowSplashScreenBackground = @color/navy_deepest` y `windowSplashScreenAnimatedIcon = @drawable/ic_launcher_logo_foreground` (mismo logo recortado del icono) con `tools:targetApi="31"`. Justo despues entra el `windowBackground` normal de la Activity (`splash_screen.xml`: `background_2` + logo centrado 220dp), que es la pantalla de carga "real" pedida y dura mientras `FirebaseInitializer`+`BackendConfig.refresh` cargan.
+
+**Barras de texto "demasiado finas":** `textbar.png` es ~2:1 (1774x887); los `EditText` median 56dp de alto sobre ~300dp de ancho (~5.4:1) -> se veian aplastadas verticalmente. Subido `android:layout_height` de los 4 campos (`emailInput`/`passwordInput` en login y register) de `56dp` a `80dp`.
+
+### 2026-06-07 (8) - Textbar aun comprimido -> alto x2 (160dp)
+
+Usuario pidio doblar el alto de los 4 campos (`emailInput`/`passwordInput` login+register): `80dp` -> `160dp`. Vigilar en pantallas pequenas: 2 campos x160dp + titulo + boton + status podrian no caber sin overlap (no se ajustaron margenes).
+
+### 2026-06-07 (9) - Texto del textbar pegado al adorno izquierdo -> mas padding-start
+
+`paddingHorizontal=22dp` -> `paddingStart=40dp`/`paddingEnd=22dp` en los 4 campos (login+register, email+password): el texto arrancaba sobre el adorno dorado de la esquina izquierda del marco; ahora entra completo dentro de la placa.
+
+### 2026-06-07 (10) - Pantalla de decks: separa listado vs edicion, grid de cartas estilo "Cartas" con +/- y badge "x?"
+
+**Pedido:** la pantalla de decks debia mostrar SOLO un listado (cada deck con boton "Editar" + boton "Nuevo deck" aparte); al editar, mostrar las cartas en el mismo formato que "Cartas" (grid 3 columnas, tamano fijo 100x140dp, proporcion real 5:7, texto truncado con elipsis), con un badge "x?" en la esquina superior = cantidad de esa carta que queda sin meter en el deck, y controles "+"/"-" por carta.
+
+**Layout (`activity_deck_builder.xml`):** dividido en `deckListSection` (boton `newDeckButton` + `savedDecksContainer`, visible por defecto) y `deckEditSection` (`deckNameInput` + `deckStatusText` + `deckCardsContainer` + `saveDeckButton` + `cancelEditButton`, `visibility="gone"` por defecto). `deckBackButton` queda fuera de ambas secciones (siempre visible, vuelve al menu). Se quito el antiguo titulo "Crear deck"/`deckStatusText` fijo en cabecera; titulo estatico ahora "Tus decks".
+
+**`DeckBuilderFragment.java`:** nuevos `showDeckList()`/`showDeckEditor()` togglean `View.GONE`/`VISIBLE` entre secciones (refactor de [[2026-06-07]] del fragmento que ya combinaba listado+editor en una sola vista). `startNewDeck()`/`loadDeckForEditing()` ahora llaman `showDeckEditor()`; `cancelEditButton` -> `showDeckList()` (limpia `editingDeckId`/`selectedCards`, descarta cambios no guardados -- comportamiento igual al de cambiar de deck sin guardar, que ya sobrescribia `selectedCards`).
+
+**Grid de cartas reutiliza el formato de [[CollectionFragment]]** (`CARDS_PER_ROW=3`, `CARD_WIDTH_DP=100`/`CARD_HEIGHT_DP=140`, `info_panel_background`, nombre+tipo/texto truncados con `TextUtils.TruncateAt.END`): nuevo `createCardCell(cardId)` envuelve el panel de carta en un `FrameLayout` para superponer el badge "x{remaining}" (= `ownedQuantity - selectedQuantity`, fondo `stat_badge_background`, texto `@color/gold` 0xFFC9A84C en esquina superior-derecha vía `Gravity.TOP|END`), y debajo anade fila de acciones reutilizando la logica YA EXISTENTE `changeSelectedQuantity`/`selectedCards` (antes en `createCardRow`, ahora eliminado en favor del grid).
+
+### 2026-06-07 (11) - "Cartas" (CollectionFragment): badge "x{cantidad}" tambien en esquina superior-derecha
+
+Mismo tratamiento visual que el badge "x{remaining}" de [[2026-06-07 (10)]] en el editor de decks: `createCardView` ya no concatena " x{quantity}" al nombre (texto truncable), ahora lo muestra en `quantityBadge` (`stat_badge_background`, texto `@color/gold` 0xFFC9A84C) superpuesto via `FrameLayout` (`cardFrame` de tamano fijo 100x140dp) en esquina superior-derecha (`Gravity.TOP|END`). Estructura: `cell` (weight=1) -> `cardFrame` (tamano fijo, centrado) -> `slot` (panel info) + `quantityBadge` (overlay).
+
+### 2026-06-07 (12) - /frontend-design aplicado a "Tus decks": linea "scriptorium/ledger" dorado-sobre-navy
+
+**Direccion elegida:** tratar el deck como un tomo/sello del jugador -- titulo serif dorado + filete `divider_gold` bajo el, primera vez que se usan en produccion los estilos `Widget.TFGGame.Button` (definidos sin enlazar desde [[2026-06-07 (5)]]) en `newDeckButton`/`saveDeckButton` (gold solido, texto navy, sin mayusculas). `saveDeckButton` renombrado "Sellar deck" (refuerza metafora "sello de cera" del TCG de fantasia).
+
+**Filas de deck (`createSavedDeckRow`):** nombre en serif-bold dorado (trunca a 1 linea), chip de estado reutilizando `stat_badge_background` (mismo lenguaje visual que los badges "x?" de [[2026-06-07 (10)]]/[[2026-06-07 (11)]]) -- "Listo para combate" en dorado si `playable`, "Incompleto" en `ink_muted` si no; boton "Editar deck" repintado de blanco/navy a dorado solido + texto navy_deepest (consistente con `Widget.TFGGame.Button`, sin crear estilo nuevo via `setBackgroundTintList`).
+
+**Resto:** `deckNameInput` recibe `sans-serif-condensed` (antes sin fontFamily); `deckStatusText` pasa de blanco puro a `@color/ink_soft` + condensed + `lineSpacingExtra`; texto de "sin decks" reescrito con tono tematico ("Aun no has forjado ningun deck...") en italica translucida.
+
+### 2026-06-07 (13) - /frontend-design: tarjetas de "Cartas" y "Editar deck" -- placa "grabada" (engraved plaque)
+
+**Bug de consistencia detectado y corregido:** `themes.xml` (decision de [[2026-06-07 (5)]]) documenta "nombres de carta -> serif, negrita, dorado: look grabado", pero `createCardView`/`createCardCell` pintaban el nombre en sans bold blanco (0xFFFFFFFF). Unificado: nombre ahora `Typeface.SERIF` bold + `@color/gold` (0xFFC9A84C) en AMBAS vistas (`CollectionFragment` y `DeckBuilderFragment`).
+
+**Nuevo elemento "engravingRule":** filete `divider_gold` de 34dp entre nombre y cuerpo -- separa visualmente titulo "grabado" del texto, refuerza metafora placa/sello ya usada en [[2026-06-07 (12)]].
+
+**Cuerpo de texto:** tipo de carta pasa a mayusculas (`type.toUpperCase(Locale.ROOT)`) como "etiqueta estampada" sobre una linea propia + texto debajo; color unificado a `0x99FFFFFF` (mismo valor que `ink_muted`, antes `0x88FFFFFF`/inconsistente entre fragments), `sans-serif` explicito + `letterSpacing=0.01` para look "tipografia de ficha". `maxLines` ajustado 6->5 para dejar hueco al filete sin desbordar el panel fijo 100x140dp.
+
+Mismo cambio aplicado identico en los dos fragments (duplican estructura de carta, ya documentado en [[2026-06-07 (10)]]) para que "Cartas" y "Editar deck" luzcan idénticas como pidio el usuario originalmente.
+
+### 2026-06-07 (14) - /frontend-design en Tienda: "El Mercader Errante" -- mismo lenguaje sello/grabado
+
+**Titulo rebautizado** "Tienda" -> "El Mercader Errante" (serif/gold + `divider_gold` debajo, igual que [[2026-06-07 (12)]]); `shopStatusText` pasa de blanco/sans a condensed italic `ink_muted`.
+
+**`createPackView` (filas de sobre):** cabecera horizontal nombre (serif-bold gold, 1 linea, ellipsize) + chip de precio "🪙 {N}" reutilizando `stat_badge_background` (mismo lenguaje que chips de [[2026-06-07 (12)]]/[[2026-06-07 (13)]]); filete `engravingRule` (`divider_gold`, 40dp) separa cabecera de cuerpo; descripcion en `sans-serif` + `ink_soft`; nueva etiqueta "CONTIENE N CARTAS" estilo "estampado" (mayusculas, `letterSpacing=0.12`, `ink_muted`, 10sp) sustituye el antiguo "Cartas por sobre: N" inline. Boton "Comprar y abrir" -> "Romper el sello" (metafora sello de cera/TCG), repintado gold-solido/navy-texto via `setBackgroundTintList` (mismo patron que "Editar deck"/"Sellar deck").
+
+**`renderOpenResult`:** texto generico "Cartas obtenidas:" -> "El sello se rompe y aparecen:", bullets "-" -> "✦" (refuerza tema mistico/TCG); `packResultText` (XML) pasa de blanco puro a `ink_soft` + condensed + `lineSpacingExtra`.
+
+Nuevo helper `dpToPx` anadido a `ShopFragment` (mismo patron que `CollectionFragment`/`DeckBuilderFragment`).
+
+### 2026-06-07 (15) - /frontend-design en menu principal: titulo "Chronicle Realms", chip de monedas estilo sello, boton dorado
+
+**`fragment_home_menu.xml`:**
+- Titulo "Menu principal" -> "Chronicle Realms" (nombre del juego, refuerza identidad; serif/gold ya estaba). Insertado `menuDivider` (`divider_gold`, 120dp) en la cadena vertical entre titulo y `userText` (re-cablear constraints: titulo->divider->userText->boton, `chainStyle=packed` se mantiene en el primer elemento) -- mismo gesto que [[2026-06-07 (12)]]/[[2026-06-07 (14)]].
+- `coinsContainer`: `coin_balance_background` (pildora blanca solida, desentonaba con la paleta navy/dorado ya extendida a deck/cartas/tienda) -> `stat_badge_background` (navy translucido + borde dorado), `coinsText` pasa de navy-on-white a `@color/gold` + `sans-serif-condensed-medium`. Mismo "chip de sello" que precio de sobres en [[2026-06-07 (14)]].
+- `userText` (email del jugador): blanco/sans -> `ink_muted` + `sans-serif-condensed` italic, tono "firma de escriba".
+- `matchmakingButton`: primer uso de `style="@style/Widget.TFGGame.Button"` via XML directo (antes solo via `setBackgroundTintList` programatico en [[2026-06-07 (12)]]/[[2026-06-07 (14)]]); renombrado "Buscar partida" -> "Buscar duelo" (tono TCG).
+
+No se toco `HomeMenuFragment.java` (solo fija textos/listeners, sin construir vistas).
+
+### 2026-06-07 (16) - /frontend-design en tablero de partida: tipografia/cromos del scriptorium SIN tocar codigos de color de estado
+
+**Cuidado especial:** `GameFragment` (1081 lineas) codifica estado de juego mediante color (gold=#E9D8A6 "puedes actuar", azul=#6699FF "origen seleccionado", rojo=#FF5555 "objetivo enemigo", gris=#888888 "muerta", navy=`info_panel_background` neutral). Cambiar esos valores podria romper la legibilidad funcional durante una partida real (no se puede playtest interactivo aqui) -> se dejaron intactos. Solo se toco TIPOGRAFIA (independiente del color-estado) y el CHROME estatico (no ligado a estado de partida).
+
+**Tipografia de nombres de carta** (`createHandCardView`/`createFieldCardView`): sans bold -> `Typeface.SERIF` bold, mismo "look grabado" de [[2026-06-07 (13)]], conservando exactamente la logica de color condicional existente (seleccion/preparada/muerta/etc. intacta).
+
+**Encabezados de tablero** (`addBoardTitle`: "Tu turno"/"Zona rival"/"Acciones preparadas"/etc.): blanco bold -> serif bold dorado (`0xFFC9A84C`) + `letterSpacing=0.02`, igual que `TextAppearance.TFGGame.Heading`. **Texto informativo** (`addBoardText`: "Sin cartas"/"Esperando turno..."): blanco -> italica `sans-serif` `0x99FFFFFF` (mismo tono "nota de manuscrito" que vacios de [[2026-06-07 (12)]]).
+
+**Chrome estatico (`activity_game.xml`):** filete `divider_gold` bajo la barra superior y sobre la seccion de mano (separa tablero/mano como un folio); `gameStatusText` -> condensed `ink_muted`; `gameBackButton` -> condensed `ink_soft`; `promptText` ("¿Que criatura hara la accion?") -> `fontFamily=serif` (tono "proclama del heraldo", color gold de aviso intacto); `submitCreaturesButton` -> `Widget.TFGGame.Button` (gold solido, mismo patron que [[2026-06-07 (15)]]).
+
+(17) [2026-06-07] Tablero de partida — separacion activas/banca por filas
+Cambio: `addBoardSection` (GameFragment.java) ahora separa fieldCards por `status` ("ACTIVE" vs resto = banca) y renderiza dos filas via nuevo helper `addFieldCardRow(list, isMySection, isBench)`. Orden vertical:
+- Mis criaturas: fila activas arriba, banca debajo (alpha 0.6, cartas 96dp)
+- Rival: banca arriba (alpha 0.6), activas abajo, pegadas a mi linea — refleja layout fisico tablero (lineas activas enfrentadas, bancas detras)
+`boardCardParams(isBench)` ahora devuelve ancho fijo (140dp activas / 96dp banca) en vez de weight=1, asi 2 activas quedan lado a lado centradas sin estirarse a todo el ancho.
+[[chronicle-realms-scriptorium-aesthetic]] — colores de estado (gold/blue/red/gray) en createFieldCardView intactos, solo se toco estructura de filas/tamanos.
+Build: `./gradlew :app:compileDebugJavaWithJavac -q` limpio.
+
+### 2026-06-11 - Replay de resolucion de turno (1 accion/segundo)
+
+`GameFragment.java`: al detectar cambio de `currentTurnId` (o partida `FINISHED`), si el turno previo tiene `resolvedMoves` no mostrados (`lastResolvedTurnId`), se reproduce antes de pintar el tablero nuevo:
+- `handleBoardUpdate(game)` (sustituye llamada directa a `renderBoard` en IN_PROGRESS): calcula `prevTurnId = turn_%03d(number-1)`, si `turns[prevTurnId].resolvedMoves` no vacio y distinto de `lastResolvedTurnId` -> `stopGameRefresh()` + `playMoveReplay(prevTurn, ...)`; al terminar marca `lastResolvedTurnId`, llama `renderBoard(game)` y reanuda `scheduleGameRefresh()`.
+- `handleFinishedGame(game)` (sustituye bloque inline en FINISHED): mismo chequeo sobre `turns[currentTurnId].resolvedMoves` (turno que acabo la partida) antes de mostrar "Has ganado/perdido".
+- Nuevo campo `lastResolvedTurnId` (turnId del ultimo turno cuyas `resolvedMoves` ya se reprodujeron), evita repetir replay en cada poll de 3s.
+
+**(actualizacion) Replay ahora pinta el tablero real (criaturas visibles) y actualiza vida en vivo, en vez de solo texto:**
+- `playMoveReplay`: clona `turn.fieldCards` (`cloneJson`, deep-copy via `toString()`) -> `snapshot`. Ordena `resolvedMoves` por `Move.resolvedOrder`. Para cada move, en su PRIMERA aparicion como `targetFieldCardId`, hace rollback de `snapshot[targetId].currentHealth/status` a `targetHealthBefore`/`targetStatusBefore` (reconstruye estado pre-turno). Pinta tablero inicial con `renderReplayBoard(snapshot, null)` (sin texto de accion).
+- `playMoveStep`: cada 2000ms (recursivo via `gameRefreshHandler.postDelayed`, `isAdded()` guard) aplica `targetHealthAfter`/`targetStatusAfter` del move actual al `snapshot` y llama `renderReplayBoard(snapshot, describeMove(move, snapshot))` -> tablero se repinta entero (vida actualizada + texto de la accion actual sustituye al anterior, pues `renderReplayBoard` limpia el contenedor). Tras el ultimo move, espera 1s mas y llama `onComplete`.
+- `renderReplayBoard(fieldCardsSnapshot, actionText)`: limpia `gameBoardContainer`, titulo "Resolviendo turno...", `addBoardText(actionText)` si no null, `buildBoardLists(snapshot)` + `addBoardSection` Rival/Tuyas (mismas vistas que tablero normal, sin handlers de click porque `pendingHandIndex`/`stagedActions` estan vacios en este punto).
+- `buildBoardLists(fieldCards)`: extraido del bloque que antes vivia inline en `renderBoard` (separa fieldCards en `boardMyCards`/`boardOpponentCards` por `ownerId`, ordena por `position`); `renderBoard` ahora solo llama `buildBoardLists(currentTurn.fieldCards)`.
+- `describeMove`/`describeFieldCard`: sin cambios, resuelven nombre de carta accion + nombre/dueño origen-destino.
+
+**Backend `Move.java`**: nuevos campos `targetHealthBefore`, `targetHealthAfter` (Integer), `targetStatusBefore`, `targetStatusAfter` (String, nombre de `FieldCardStatus`). `GameService.resolveTurn`: captura before-values del target ANTES de aplicar el efecto (y los copia como after-values por defecto), luego sobreescribe after-values si el efecto se aplico (incluye caso de muerte -> `DEAD`/0). Si `actionCard`/`effect`/`target` invalidos o target ya `DEAD`, before==after (sin cambio, simplifica reconstruccion en Android).
+
+**(actualizacion) Resaltado de la accion actual durante el replay:**
+- `playMoveStep`: por cada move, marca en el `snapshot` la criatura origen con `_replayHighlight="attacker"` y la criatura objetivo con `_replayHighlight="target"` (helper `clearReplayHighlights` borra las marcas del paso anterior antes de poner las nuevas).
+- `createFieldCardView`: nueva rama prioritaria que lee `fieldCard.optString("_replayHighlight","")` -> `"attacker"` pinta fondo azul `0xCC6699FF` (mismo tono que "origen seleccionado"), `"target"` pinta fondo rojo `0xCCFF5555` (mismo tono que "objetivo enemigo"); ambos con texto blanco. Estas claves `_replay*` son metadata local de UI, nunca se envian al backend.
+- `addReplayActionText` (sustituye `addBoardText` para el texto de accion en `renderReplayBoard`): texto serif-bold 16sp sobre fondo dorado solido `0xFFE9D8A6`/texto navy `0xFF172033`, full-width con padding -- mas prominente que el texto informativo normal.
+
+### 2026-06-11 (cont.) - Criatura muerta no actua si su turno aun no ha ocurrido
+
+**Backend `GameService.resolveTurn`**: nuevo chequeo justo despues de capturar before/after del target -- si `source` (criatura origen del move) es `null` o `status == DEAD` (murio por un move anterior con `resolvedOrder` menor), `continue` sin aplicar efecto. El move sigue registrandose en `resolvedMoves` con su `resolvedOrder` (before==after en el target, sin cambios). Como los moves se procesan en orden de `resolvedOrder`, una criatura solo se salta su accion si murio en un move ANTERIOR -- si su accion ya se proceso, una muerte posterior no la retroactiva.
+
+**Android `GameFragment`**: en `playMoveStep`, si `snapshot[sourceId].status=="DEAD"` (la criatura origen ya broker desde un paso anterior del replay) -> no aplica `targetHealthAfter`/`targetStatusAfter` ni resalta atacante/objetivo (`clearReplayHighlights` sin nuevas marcas). `describeMove` detecta el mismo caso y muestra `"N. {Criatura} ha caído y no puede usar {Carta}"` en vez de `"N. Carta: Origen → Objetivo"`.
+
+### 2026-06-12 - Limpieza de procesos cloudflared huerfanos
+
+Se detecto que `CloudflareTunnelPublisher` solo mataba el proceso `cloudflared` via shutdown hook (`stopTunnel`). Si el backend se mata duro (Stop en IDE, debug stop, `taskkill /F`, crash), el hook no corre y `cloudflared.exe` queda huerfano, ocupando el tunel/puerto entre arranques.
+
+**Cambios en `server/src/main/java/com/tfg/tcgserver/service/tunnel/CloudflareTunnelPublisher.java`:**
+- `publishTunnelUrl()` ahora llama a `killStaleCloudflaredProcesses()` antes de lanzar el tunel nuevo.
+- `killStaleCloudflaredProcesses()`: extrae el nombre de proceso de `cloudflare.tunnel.command` (via `extractProcessName`, anade `.exe` en Windows si falta) y ejecuta `taskkill /F /IM <nombre>` (Windows) o `pkill -f <nombre>` (Unix). Errores se ignoran (`LOGGER.debug`), es normal que no haya proceso previo.
+- `isWindows()`: detecta SO via `os.name`.
+- `stopTunnel()` (shutdown hook normal) ahora ademas mata `tunnelProcess.descendants()` con `ProcessHandle::destroy`, por si `cloudflared` lanza subprocesos.
+
+Nuevo import: `java.nio.file.Paths`.
+
+No elimina el riesgo de proceso colgado durante la sesion si se mata la consola (imposible desde la JVM), pero garantiza limpieza en el siguiente arranque -> no se acumulan `cloudflared.exe` huerfanos.
+
+**Nota para revisiones futuras de "procesos colgados":** se revisaron todos los `ProcessBuilder`/`ExecutorService`/`@Scheduled`/`Timer` del backend (`grep` sobre `server/src/main/java`). Unico proceso externo es `cloudflared` en `CloudflareTunnelPublisher`. Resto de hilos (matchmaking, polling Android) viven en memoria sin procesos OS asociados.
+
+### 2026-06-12 (cont.) - Sustituido polling de 3s por long polling (partida y matchmaking)
+
+**Motivacion:** Android refrescaba `GET /api/games/{gameId}` y `POST /api/matchmaking/find` cada 3s con un `Handler.postDelayed`. Se cambia a long polling: el cliente lanza la peticion y el backend la mantiene abierta hasta que hay cambio real o expira un timeout (~25s), devolviendo entonces; el cliente relanza inmediatamente. Tunnel de Cloudflare NO se toca (sigue como en [[2026-06-01]]/[[2026-06-12]]).
+
+**Backend - nuevo: `GameRules.LONG_POLL_TIMEOUT_MS = 25_000`** (`server/src/main/java/com/tfg/tcgserver/models/rules/GameRules.java`).
+
+**`Game.java`**: nuevo campo `version` (long, getter/setter), serializado junto al resto del estado.
+
+**`ActiveGameStore.java`** (reescrito): cada partida activa tiene `Entry{game, version, waiters}`. `save()` incrementa `version` y lo escribe en `game.setVersion(...)`, luego completa los `waiters` pendientes. `remove()` marca `version=-1` y completa waiters (para que un long poll en curso sobre una partida que acaba de terminar no se quede colgado). Nuevo `awaitVersionChange(gameId, sinceVersion, timeoutMs)`: si la version actual ya difiere de `sinceVersion` devuelve de inmediato; si no, registra un `CompletableFuture` que se completa al cambiar version o por `completeOnTimeout`.
+
+**`GameService`**: `getGame(gameId)` ahora delega en `getGame(gameId, since)`. Si la partida no esta activa (historico/no encontrada), responde directo desde `gameRepository`. Si esta activa y `since == null || since != currentVersion`, responde inmediato. Si `since == currentVersion`, espera con `awaitVersionChange` y al resolver vuelve a llamar `getGame(gameId, null)` (cubre tanto "cambio de version" como "partida recien finalizada").
+
+**`GameController`**: `GET /api/games/{gameId}` acepta `@RequestParam(required=false) Long since`.
+
+**`MatchmakingQueue`**: nuevo `matchWaiters` (`Map<playerId, CompletableFuture<String>>`). `storeMatchedGame` completa el waiter si existe, si no lo deja en `matchedGamesByPlayerId` (igual que antes). Nuevo `awaitMatch(playerId, timeoutMs)`: si ya hay partida asignada la devuelve al instante; si no, registra waiter con `completeOnTimeout(null, ...)`. `findOpponentFor`: si el oponente sacado de la cola es el propio jugador (entrada residual de un long poll anterior que expiro), se sustituye por la entrada nueva en vez de reencolar ambas -- evita que la cola crezca sin limite con reintentos.
+
+**`MatchmakingService.findMatch`**: cuando no hay rival disponible, en vez de devolver `waiting` al instante, hace `matchmakingQueue.awaitMatch(playerId, GameRules.LONG_POLL_TIMEOUT_MS)` y traduce el resultado (`matched` si aparecio gameId, `waiting` si expiro el timeout).
+
+**`application.properties`**: anadido `spring.mvc.async.request-timeout=30000` (> `LONG_POLL_TIMEOUT_MS`, evita que Tomcat corte la espera antes que el propio timeout del backend).
+
+**Android `BackendClient`**:
+- `executorService` paso de `newSingleThreadExecutor()` a `newFixedThreadPool(4)` -- con un solo hilo, una peticion de long poll (hasta ~30s) bloqueaba el resto de llamadas (submitTurnSelection, selectCreatures, etc.).
+- Nuevas constantes `DEFAULT_READ_TIMEOUT_MS=5000`, `LONG_POLL_READ_TIMEOUT_MS=35000`.
+- `get`/`post` ahora tienen overload con `readTimeoutMs` explicito; las versiones sin ese parametro usan `DEFAULT_READ_TIMEOUT_MS`.
+- `getGame(idToken, gameId, sinceVersion, callback)`: si `sinceVersion != null`, anade `?since=` a la URL y usa `LONG_POLL_READ_TIMEOUT_MS`; si es `null`, comportamiento de siempre (timeout corto, respuesta inmediata).
+- `findMatch(...)` usa `LONG_POLL_READ_TIMEOUT_MS` (el backend puede tardar hasta ~25s en responder).
+
+**Android `GameFragment`**:
+- Nuevo campo `Long lastVersion`. `renderGame` lo actualiza desde `game.optLong("version", 0)` ANTES del chequeo de "respuesta sin cambios" (asi se mantiene al dia incluso en respuestas de timeout sin cambios).
+- `loadGame(showLoading)` (carga inicial / re-render tras accion local / tras mutaciones) sigue pidiendo `since=null` -> respuesta inmediata, igual que antes.
+- Nuevo `pollGame()`: pide `since=lastVersion` (long poll). Es el nuevo cuerpo del `Runnable gameRefresh` (antes `() -> loadGame(false)`).
+- `scheduleGameRefresh()`: de `postDelayed(gameRefresh, 3000)` a `post(gameRefresh)` (inmediato) -- el long poll del backend ya hace de espera. En error de red, `pollGame` aplica backoff manual de 3s antes de reintentar.
+- Los `postDelayed(..., 2000)` del replay de turno ([[2026-06-11]]) NO se tocan, siguen siendo animacion con ritmo fijo.
+
+**Android `DeckSelectionFragment`**: `scheduleMatchmakingPoll()` de `postDelayed(matchmakingPoll, 3000)` a `post(matchmakingPoll)` (inmediato, el backend ya espera ~25s). En error de red, backoff manual de 3s antes de reintentar.
+
+**No verificado:** no se pudo compilar (`mvn`/`mvnw` no disponibles en este entorno) ni hacer build de Android. Revisar al compilar por primera vez.
+
+### 2026-06-18 - Cliente web Angular creado (`angular/`)
+
+Se creo un tercer cliente, web, en `angular/` (proyecto `tcg-web`), para interactuar con el mismo Firebase (`online-tcg-arasesp`) que Android y el backend.
+
+Decisiones de stack (preguntadas al usuario):
+- CSS plano (sin SCSS).
+- NgModules clasico, no standalone components (`ng new --standalone=false`).
+- AngularFire (`@angular/fire@18` + `firebase`) para Auth y Realtime Database desde el cliente.
+
+Generado con:
+```text
+npx ng new tcg-web --directory=. --routing --style=css --standalone=false --skip-git --package-manager=npm
+```
+(ejecutado dentro de `angular/`, carpeta ya existente y vacia, por eso `--directory=.`).
+
+Config Firebase web (de Firebase console, app registrada `online-tcg-arasesp`) puesta en `angular/src/environments/environment.ts` y `environment.development.ts` (`apiKey`, `authDomain`, `databaseURL`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`). No incluye `measurementId`/analytics (no se uso `getAnalytics`).
+
+Estructura creada:
+```text
+angular/src/app/app.module.ts            - registra Auth+Database de AngularFire, declara componentes
+angular/src/app/app-routing.module.ts    - rutas: '' -> redirect 'login', 'login', 'register', 'home'
+angular/src/app/services/auth.service.ts - login/register/logout + currentUser$ (Observable<User|null> via user(auth))
+angular/src/app/services/cards.service.ts- getCards() lee nodo 'cards' de Realtime DB con listVal(keyField:'id')
+angular/src/app/pages/login/             - formulario email/password, ngModel, navega a /home
+angular/src/app/pages/register/          - igual que login pero createUserWithEmailAndPassword
+angular/src/app/pages/home/              - muestra email usuario actual + lista cartas desde CardsService
+```
+
+**Bug encontrado y corregido:** `provideFirebaseApp`/`provideAuth`/`provideDatabase` (de `@angular/fire/*`) devuelven `EnvironmentProviders`, NO son `NgModule`/`ModuleWithProviders` -- no pueden ir en el array `imports` de `@NgModule`, deben ir en `providers`. Ponerlos en `imports` rompe la compilacion de **todo** el modulo silenciosamente en cascada: el compilador AOT reporta errores no relacionados (`NG8002: Can't bind to 'ngModel'`, `NG8004: No pipe found with name 'async'/'json'`) en todos los componentes declarados en ese modulo, en vez de senalar el error real (`TS2322: Type 'EnvironmentProviders' is not assignable to type 'any[] | Type<any> | ModuleWithProviders<{}>'`) que solo aparecio tras borrar cache (`rm -rf .angular dist`) y repetir `ng build`. Leccion: si un `ng build` con NgModules da errores de pipes/directivas "basicas" (`async`, `ngModel`, `ngIf`) que deberian funcionar, sospechar que el `@NgModule` decorator entero fallo a compilar por otro motivo y revisar canal de error completo, no solo los ultimos mensajes ni fiarse de errores en cache (limpiar `.angular/` si el mensaje no cambia entre intentos).
+
+Tambien se anadio `CommonModule` explicito a `imports` de `AppModule` (no hizo falta tras el fix real, pero se deja porque no estorba).
+
+Build verificado: `npx ng build` (con warning de bundle 542KB > budget 512KB, no bloqueante) y `npx ng serve` sirviendo `/login` con 200.
+
+**Pendiente:** registrar reglas de seguridad de Firebase Realtime Database para acceso desde web (actualmente las reglas existentes son las mismas que usa Android/backend); decidir si el cliente web necesita endpoints propios del backend Java o solo lee/escribe Firebase directo para Auth+lectura de `cards`.
+
+### 2026-06-18 (cont.) - Perfil editable, historial de partidas, cartas/mazos solo-lectura en Angular
+
+Se amplio el cliente Angular para cubrir el resto del alcance pedido por el usuario: ver cartas/mazos (solo lectura), ver+editar perfil (username + avatar predefinido), ver historial de partidas con detalle turno a turno. Esto requirio dos endpoints nuevos en el backend Java que no existian.
+
+**Backend nuevo:**
+- `UserProfile.java`: nuevo campo `avatarId` (String) + getter/setter. Perfiles creados antes de este cambio devuelven `avatarId=null`; el frontend lo trata como "usar avatar por defecto".
+- `PlayerService.createProfile`: asigna `avatarId="avatar_1"` por defecto a perfiles nuevos.
+- `PlayerService.updateProfile(uid, username, avatarId)` (nuevo): `findById` -> falla si no existe perfil -> `setUsername`/`setAvatarId`/`setUpdatedAt` -> `save()` (reescritura del objeto completo, igual que el resto de mutaciones de perfil en este servicio).
+- `api/dto/UpdateUserProfileRequest.java` (nuevo record): `username`, `avatarId`, ambos `@NotBlank`.
+- `PlayerController`: nuevo `PUT /api/users/{uid}/profile` (requiere `requireSameUser`). Path `/profile` separado del `GET /api/users/{uid}` para no confundir "perfil completo" con "subconjunto editable".
+- `GameRepository.findAll()` (nuevo): mismo patron que `CardRepository.findAll()` (`GenericTypeIndicator<Map<String,Game>>` sobre el path `"games"`).
+- `api/dto/GameSummaryResponse.java` (nuevo record): `gameId, status, createdAt, startedAt, finishedAt, player1Id, player2Id, winnerId, opponentId` (este ultimo computado).
+- `GameService.getGamesForPlayer(uid)` (nuevo): `gameRepository.findAll()` -> filtra por `player1Id==uid || player2Id==uid` -> mapea a `GameSummaryResponse` -> ordena por `createdAt` descendente.
+- `PlayerController`: nuevo `GET /api/users/{uid}/games` (requiere `requireSameUser`); para esto `PlayerController` ahora tambien inyecta `GameService` en el constructor (antes solo tenia `PlayerService`).
+- **Hallazgo importante verificado en codigo**: `GameRepository.save()` (escritura en el nodo `games/` de Firebase) **solo se llama cuando una partida termina** (`GameService.finishGame` y el camino de fin de turno dentro de `submitTurnSelection` cuando `resolveTurn` devuelve `finished=true`). Las partidas en curso viven solo en `ActiveGameStore` (memoria), nunca en Firebase. Por tanto `GameRepository.findAll()` sobre `games/` devuelve **automaticamente solo partidas FINISHED** -- no hizo falta filtrar por estado ni decidir si incluir partidas en curso.
+- No se pudo compilar (`mvn`/`mvnw` no disponibles en este entorno, igual que en cambios anteriores) -- revisar al compilar por primera vez en el IDE.
+
+**Frontend nuevo (`angular/`):**
+- `HttpClientModule` + `HTTP_INTERCEPTORS` anadidos a `AppModule`. Nuevo `app/interceptors/auth.interceptor.ts`: si `auth.currentUser` existe, adjunta `Authorization: Bearer <idToken>` (via `user.getIdToken()`) a cada peticion HTTP; si no hay usuario, pasa la peticion sin tocar.
+- `app/services/backend-config.service.ts` (nuevo): `BehaviorSubject<string>` seedeado con `environment.apiBaseUrl` (`http://localhost:8080` en dev y prod por ahora, pendiente URL real del tunnel Cloudflare), con lectura unica (`take(1)`) de `config/backend/baseUrl` en Realtime DB que sobreescribe el valor si existe -- mismo patron que `BackendConfig` de Android.
+- `app/services/backend-api.service.ts` (nuevo): wrapper unico de `HttpClient` hacia el backend Java -- `getProfile`, `updateProfile`, `getCollection`, `getDecks`, `getDeck`, `getGames`, `getFinishedGame`. El header de auth lo pone el interceptor, este servicio no toca tokens.
+- `app/models/` (nuevo): `card.model.ts`, `deck.model.ts`, `user-profile.model.ts`, `game.model.ts` -- interfaces TS que mapean 1:1 los DTOs/modelos Java (incluye `GameStatus`/`MoveType`/`FieldCardStatus`/`CardType` como uniones de string literal, ya que los enums Java serializan como su `name()`). `cards.service.ts`'s `Card` ahora extiende `CardData` de `card.model.ts` en vez de ser un tipo suelto `{id?, [key:string]:unknown}`.
+- Regla seguida (y por seguir en cambios futuros): `cards` se sigue leyendo directo de Firebase (`CardsService`, dato publico sin dueno). Perfil/coleccion/mazos/partidas pasan siempre por el backend Java porque ahi vive el `requireSameUser` -- leerlos directo de RTDB duplicaria esa autorizacion en reglas de Firebase y en Java.
+- `app/shared/avatars.ts` (nuevo): constante `AVATARS` con 6 avatares (`avatar_1`..`avatar_6`), `DEFAULT_AVATAR_ID`, helper `avatarSrc()`. Imagenes en `angular/public/avatars/avatar_1.svg`..`avatar_6.svg` (SVGs planos geometricos simples, creados sin assets externos -- circulo de color + figura, sin dependencias de licencia). Se sirven desde `public/` porque es la carpeta de assets ya cableada en `angular.json` para este proyecto (la version 18 con builder `application` no usa `src/assets/`, que no existe aqui).
+- `app/shared/replay.ts` (nuevo, funciones puras sin DI): `buildTurnReplay(turn, cardsCatalog, myUid)` -- puerto a TypeScript del algoritmo de replay de Android (`GameFragment.playMoveReplay`/`describeMove`/`describeFieldCard`, ver entrada [[2026-06-11]]), SIN los `setTimeout` de 2s de animacion (aqui se calcula todo de una vez, sin animar): clona `turn.fieldCards`, hace rollback de cada target tocado a `targetHealthBefore/targetStatusBefore` la primera vez (mismo guard que Android), recorre `resolvedMoves` ordenados por `resolvedOrder` aplicando `targetHealthAfter/targetStatusAfter` salvo que el origen ya este `DEAD`, devuelve un `ReplayStep[]` estructurado (no string pre-formateado) para que la plantilla decida el render.
+- Paginas nuevas (todas `NgModule` clasico, declaradas en `AppModule`, igual que `LoginComponent`/`HomeComponent`):
+  - `pages/cards/` -- lista solo-lectura, reusa `CardsService.getCards()` sin cambios.
+  - `pages/decks/` -- lista de mazos del usuario via `BackendApiService.getDecks(uid)`.
+  - `pages/deck-detail/` -- `deckId` de la ruta, cruza `getDeck()` con el catalogo de `CardsService` para mostrar nombres.
+  - `pages/profile/` -- `getProfile()` al cargar, formulario `ngModel` (username) + grid de avatares (click selecciona, resalta), boton guardar llama `updateProfile()`.
+  - `pages/game-history/` -- `getGames(uid)`, lista con fecha/rival(`opponentId`)/resultado (`winnerId===uid`), enlaza a detalle.
+  - `pages/game-detail/` -- `getFinishedGame(gameId)` + catalogo de cartas, cada `Turn` en un `<details><summary>Turno N</summary>` (nativo HTML, sin stepper con estado) con la lista de `resolvedMoves` via `buildTurnReplay`.
+- Rutas anadidas en `app-routing.module.ts`: `cards`, `decks`, `decks/:deckId`, `profile`, `games`, `games/:gameId`. `home.component.html` ahora tiene `<nav>` con enlaces a las 4 secciones nuevas (antes no tenia navegacion).
+- Sin guards de ruta (login/register/home tampoco los tenian); pendiente si se quiere mas adelante.
+
+**Verificado:** `npx ng build` limpio (solo warning de presupuesto de bundle, 590KB > 512KB, no bloqueante). `npx ng serve` + smoke test con `curl` a `/cards`, `/decks`, `/profile`, `/games` -- los 4 devuelven 200.
+
+**Pendiente:** el backend no se pudo compilar en este entorno (sin `mvn`/`mvnw`) -- compilar y probar `PUT /api/users/{uid}/profile` y `GET /api/users/{uid}/games` manualmente (curl o `dev.html`) antes de dar esto por cerrado. Tambien sigue pendiente la URL real del tunnel Cloudflare en `environment.ts` (`apiBaseUrl` de produccion hoy apunta a `localhost:8080`, solo sirve en local).
+
+### 2026-06-18 (cont.) - /frontend-design en Angular: identidad "Chronicle Realms" extendida a la web
+
+Se aplico `/frontend-design` al cliente Angular, que hasta ahora solo tenia CSS por defecto sin estilo. En vez de inventar una estetica nueva, se extendio la identidad visual **ya establecida y muy iterada en Android** ("Chronicle Realms", estetica "scriptorium" de manuscrito iluminado -- ver entradas `/frontend-design` del 2026-06-07 [[chronicle-realms-scriptorium-aesthetic]] y `android/app/src/main/res/values/colors.xml`), para que ambos clientes (web y movil) se vean como el mismo juego.
+
+**Paleta** (copiada 1:1 de `colors.xml` de Android): `navy_deepest #0D1520`, `navy_dark #101828`, `navy #172033`, `gold #C9A84C`, `gold-soft/parchment #E9D8A6`, `ink #FFFFFF`, `ink_soft #E7EDF7`, `ink_muted rgba(255,255,255,.6)`. Colores de estado del tablero Android (`accent_blue #6699FF` = atacante/accion propia, `accent_red #FF5555` = objetivo/rival/peligro, `dead_gray #888888`) reutilizados en la web para el replay turno a turno (origen del move en azul, objetivo en rojo -- mismo significado que el highlight de Android, no "mio vs rival").
+
+**Tipografia** (Google Fonts, nuevo `<link>` en `angular/src/index.html`): `Cinzel` (display, mayusculas "grabadas", para wordmark/headings) + `Oswald` condensed (UI: nav, botones, labels, uppercase tracking -- equivalente web de `sans-serif-condensed` de Android) + `Source Sans 3` (body/texto largo). Texto "nota de manuscrito" (ayudas/textos secundarios) usa Oswald italica atenuada, igual que Android usa sans-serif italica para "Sin cartas"/"Esperando turno...".
+
+**Firma/motivo recurrente:** medallon "sello de lacre" (`.seal`, circulo con anillo dorado) y `.seal-badge` (pildora con borde dorado) -- reusado para el grid de avatares de perfil, la insignia de mazo jugable/incompleto, y el badge victoria/derrota del historial. Conecta con el vocabulario ya usado en Android ("el sello se rompe y aparecen...").
+
+**Archivos:**
+- `angular/src/styles.css` (reescrito): tokens CSS (`:root` con toda la paleta/fuentes), clases globales reutilizables -- `.panel`, `.btn-gold`/`.btn-ghost`, `.field`, `.seal`/`.seal-badge` (variantes `gold`/`muted`/`victory`/`defeat`), `.ledger`/`.ledger-row`/`.ledger-main` (listas tipo registro, usada en mazos e historial), `.auth-page`/`.auth-form`, `.eyebrow`/`.muted-note`, `.hr-gold`. Incluye `prefers-reduced-motion`.
+- `angular/src/index.html`: `<link>` Google Fonts (Cinzel + Oswald + Source Sans 3).
+- `app.component.ts/.html/.css` (reescrito): ahora es el "shell" persistente -- topbar con wordmark "⟡ Chronicle Realms" + nav (`Cartas/Mazos/Perfil/Historial/Salir`, oculta si no hay sesion via `*ngIf="currentUser$ | async"`). `logout()` se movio aqui desde `HomeComponent` (logica de shell, no de pagina).
+- `pages/home/`: simplificado -- se quito el nav duplicado y el listado JSON crudo de cartas que eran restos de la prueba inicial (ver entrada original del 2026-06-18 al crear el proyecto). Ahora es un dashboard con 4 tiles (`Cartas/Mazos/Perfil/Historial`, simbolos heraldicos no-emoji: `✦ ❖ ⟡ §`) que enlazan a cada seccion.
+- `pages/login/`, `pages/register/`: panel centrado (`.auth-page` + `.panel.auth-form`), titulos en tono "Entra al reino"/"Forja tu nombre".
+- `pages/cards/`: grid de "cartas TCG" reales (`.tcg-card`, marco navy+oro para CREATURE, borde azul para ACTION, coste en circulo, stats ATK/HP/SPD o DAÑO segun tipo).
+- `pages/decks/`, `pages/deck-detail/`: listas `.ledger` con `.seal-badge` de estado (jugable/incompleto).
+- `pages/profile/`: grid de avatares como medallones `.seal` (circulo+anillo dorado), boton guardar dorado, confirmacion "El sello queda fijado."
+- `pages/game-history/`: `.ledger` con `.seal-badge` victoria(dorado)/derrota(rojo)/en curso.
+- `pages/game-detail/`: cada turno en `<details class="panel">` ("folio" desplegable), movimientos con origen en azul / objetivo en rojo, muertos en gris.
+
+**Verificado:** `npx ng build` limpio (mismo warning de bundle preexistente, no nuevo). `npx ng serve` + `curl` a `/`, `/login`, `/register`, `/home`, `/cards`, `/decks`, `/profile`, `/games` -- todos 200.
+
+**No verificado:** sin herramienta de captura de pantalla en este entorno, no se pudo ver el render real en navegador -- solo se verifico que compila y las rutas cargan. Revisar visualmente en un navegador real antes de considerar el diseño cerrado (contraste de colores, alineacion de los `.seal`/`.tcg-card`, tamaño de fuente Cinzel en mayusculas largas).
+
+### 2026-06-18 (cont.) - Bug: perfil (y cualquier endpoint protegido) no cargaba en Angular -- faltaba CORS
+
+**Sintoma:** la pagina de perfil en Angular se quedaba en blanco (sin datos, sin error visible).
+
+**Causa raiz:** el backend nunca tuvo configuracion CORS. Toda peticion cross-origin (`http://localhost:4200` Angular -> `http://localhost:8080` Java) con header `Authorization` dispara un preflight `OPTIONS`. `FirebaseAuthenticationFilter.shouldNotFilter` no excluia `OPTIONS`, asi que el preflight (sin header `Authorization`, es preflight) recibia `401` sin cabeceras CORS -> el navegador bloqueaba la peticion real silenciosamente. Afectaba a TODOS los endpoints protegidos (`/api/users/**`, `/api/games/**` salvo los 2 publicos), no solo perfil -- `decks`/`game-history`/`game-detail` tenian el mismo problema pero no se habia notado porque ademas esos `subscribe()` tampoco tenian handler de error (fallo mudo, igual que perfil).
+
+**Arreglo backend:**
+- `FirebaseAuthenticationFilter.shouldNotFilter`: anadido `"OPTIONS".equalsIgnoreCase(request.getMethod())` a la condicion de bypass.
+- `config/WebCorsConfig.java` (nuevo, `WebMvcConfigurer`): `addCorsMappings` sobre `/api/**`, origenes desde `app.cors.allowed-origins` (nueva property en `application.properties`, default `http://localhost:4200`), metodos `GET,POST,PUT,DELETE,OPTIONS`, headers `*`.
+- Pendiente cuando se despliegue de verdad: anadir el dominio real (Cloudflare Tunnel o donde se hostee la web) a `app.cors.allowed-origins` (admite varios separados por comma via `@Value` en array).
+
+**Arreglo frontend:** `profile.component.ts` -- el `subscribe()` de `getProfile` no tenia callback de error, asi que un fallo (CORS u otro) dejaba la pagina en blanco sin pista. Ahora tiene `error:` callback que rellena `this.error`, y la plantilla (`profile.component.html`) muestra ese error incluso cuando `profile` es `null` (antes el `<p *ngIf="error">` estaba anidado dentro de `*ngIf="profile"`, invisible si la carga fallaba).
+
+**Pendiente (senalado al usuario, no implementado aun):** `decks`, `deck-detail`, `game-history`, `game-detail` tienen el mismo patron de `subscribe()` sin manejo de error -- funcionan ya que CORS esta arreglado, pero seguiran fallando mudos si hay otro problema futuro (token caducado, backend caido, etc).
+
+**No verificado:** backend no se pudo recompilar en este entorno (sin `mvn`/`mvnw`, igual que siempre) -- el usuario debe reiniciar el backend desde su IDE para que el fix de CORS surta efecto (cambios Java no aplican en caliente).
+
+### 2026-06-18 (cont.) - Android: avatar visible + perfil editable (paridad con la web)
+
+Se llevo a Android lo mismo que se construyo en Angular: el `avatarId` elegido en la web ahora se ve en Android, y el perfil (username + avatar) se puede editar tambien desde Android, no solo desde la web.
+
+**Avatares (`android/app/src/main/res/drawable/`):**
+- `avatar_1.xml` .. `avatar_6.xml` (nuevos): vector drawables 64x64, mismo color/forma EXACTOS que los SVG de `angular/public/avatars/avatar_1..6.svg` (circulo de fondo + figura: triangulo/circulo/cuadrado/diamante/estrella/hoja), para que el emblema se vea igual en ambos clientes. El fondo circular se convirtio a `pathData` de dos arcos (`M2,32 A30,30 0 1,1 62,32 A30,30 0 1,1 2,32 Z`) porque los vector drawables de Android no tienen elemento `<circle>`, solo `<path>`.
+- `avatar_ring_selected.xml`/`avatar_ring_unselected.xml` + `avatar_picker_ring.xml` (selector): anillo dorado cuando el boton de avatar esta seleccionado (`android:state_selected`), anillo tenue blanco si no. Se activa via `button.setSelected(true/false)` en codigo, patron estandar de Android (no hacia falta logica custom).
+
+**`activity_profile.xml`** (usado tanto por `ProfileFragment` -- la pantalla viva -- como por el extinto `ProfileActivity`):
+- El `TextView avatarText` (letra generada del username) se sustituyo por `ImageView avatarImage` dentro del mismo `FrameLayout` circular (`@drawable/avatar_background`).
+- Nuevo panel "EDITAR PERFIL" (mismo estilo `info_panel_background` + eyebrow dorado que el panel "MAZO ACTIVO"): `EditText usernameInput`, fila de 6 `ImageButton avatarOption1..6` (uno por avatar, con `avatar_picker_ring` de fondo), `Button saveProfileButton` (estilo gold solido como `refreshButton`), `TextView profileStatusText` para feedback.
+
+**`ProfileFragment.java`** (reescrito):
+- `showProfile(snapshot)` ahora tambien lee `avatarId` (`snapshot.child("avatarId")`); si es `null` o no esta en la lista de 6 ids conocidos, usa `DEFAULT_AVATAR_ID = "avatar_1"` (mismo fallback que el backend/Angular).
+- `selectAvatar(avatarId)`: actualiza `selectedAvatarId`, pinta `avatarImage` (`resolveAvatarDrawable` via `getResources().getIdentifier(avatarId, "drawable", ...)`, fallback `R.drawable.avatar_1` si no existe) y marca el boton correspondiente como `setSelected(true)` (resto `false`). Se llama tanto al recibir datos de Firebase como al pulsar un avatar del picker (preview inmediato antes de guardar).
+- `saveProfile()`: replica el patron exacto de `DeckBuilderFragment` para escritura via backend -- `user.getIdToken(false).addOnSuccessListener(tokenResult -> backendClient.updateProfile(tokenResult.getToken(), uid, username, selectedAvatarId, callback))`, callback actualiza `profileStatusText` via `runOnUiThreadSafe` (helper nuevo, mismo nombre/patron que en `DeckBuilderFragment`). Valida que `username` no este vacio antes de llamar.
+- La edicion pasa por el backend Java (`PUT /api/users/{uid}/profile`, mismo endpoint que ya usa Angular), no escribe Firebase directo -- mismo principio de autorizacion centralizada ya aplicado en la web.
+
+**`BackendClient.java`:** nuevo metodo `updateProfile(idToken, uid, username, avatarId, callback)`, mismo patron que `updateDeck` (`PUT /api/users/{uid}/profile`, body `{"username":..., "avatarId":...}`).
+
+**Limpieza forzada:** `ProfileActivity.java` (ya confirmado dead code -- nada lo lanza, `HomeActivity` solo usa `ProfileFragment`) referenciaba `R.id.avatarText`, que dejo de existir al cambiar el layout compartido `activity_profile.xml`. Habria roto la compilacion. Se borro el archivo entero y su `<activity android:name=".ProfileActivity">` en `AndroidManifest.xml` (en vez de mantener un campo/vista muerta solo para que compilase un archivo que nadie usa).
+
+**Verificado:** `./gradlew :app:compileDebugJavaWithJavac -q` limpio (solo warnings de `source/target 8 obsolete`, nada nuevo). `./gradlew :app:processDebugResources -q` limpio (valida XML de layouts/drawables/manifest, sin errores) -- a diferencia de intentos anteriores, esta vez Gradle SI pudo ejecutar en este entorno (sin el error de red `Unable to establish loopback connection` de versiones previas de la entrada [[2026-05-28]]).
+
+**No verificado:** no se instalo/ejecuto la app en emulador o dispositivo real -- solo compilacion + procesamiento de recursos. Falta probar visualmente que el picker de avatares y el guardado funcionen end-to-end contra el backend real.
+
+### 2026-06-19 - Memoria del TFG (docx): apartado web Angular + ampliacion exhaustiva Android/Angular/Backend
+
+Se amplio `docs/Proyecto_Chronicle_Realms.docx` (memoria oficial del TFG, fuera de `server/`) en dos pasadas, usando 3 subagentes Explore en paralelo para inventariar el codigo real de `android/`, `angular/` y `server/` antes de escribir, evitando documentar nada que no exista en el codigo.
+
+**Pasada 1 (apartado web):** anadido bloque "Angular" en tecnologias (4.2), 4o componente "Cliente Web (Angular)" en la arquitectura cliente-servidor (6.2), y nueva subseccion "Estructura de la aplicacion Web (Angular)" (pantallas, `BackendApiService` + interceptor Bearer, los 2 endpoints nuevos `PUT /api/users/{uid}/profile` y `GET /api/users/{uid}/games`, diseno visual heredado de Android).
+
+**Pasada 2 (ampliacion exhaustiva):**
+- Nueva subseccion "API REST completa" (6.2): los ~25 endpoints de los 10 controllers, agrupados, con metodo/path/auth.
+- Modelo de datos ampliado: atributos que faltaban en `UserProfile` (avatarId, mmr, eloId, cardCollection), `Card` (image, `EffectTarget`), `Deck` (cardCount, timestamps); 2 entidades nuevas (`PurchaseTransaction`, `Elo`); tabla de constantes `GameRules`/`DeckRules`.
+- **Bug de documentacion corregido:** la memoria decia `activeDeckId`, pero el atributo real en `UserProfile.java` es `selectedDeckId` -- corregido en el docx.
+- Codificacion (6.3) ampliada con 2 mecanismos de backend no documentados antes (long polling via `ActiveGameStore.awaitVersionChange` reutilizado por `MatchmakingQueue`; gestion del mazo de acciones -- robo/descarte/reshuffle en `drawCards`/`discardTurnCards`) y nueva subseccion "Cliente Web (Angular)" (interceptor `AuthInterceptor`, replay turno a turno en `shared/replay.ts`, equivalente web del replay animado de `GameFragment`).
+- Nota anadida sobre `ShopActivity`/`CollectionActivity`/`DeckBuilderActivity`/`DeckSelectionActivity`: existen como Activities sueltas casi duplicadas de sus Fragments homonimos (los Fragments alojados en `HomeActivity` son la via de navegacion real).
+
+**Metodo:** todas las ediciones via `python-docx` (scripts en `docs/generar_presentacion.py`, `docs/agregar_angular_docx.py`, `docs/ampliar_docx_extenso.py`), insertando parrafos con el mismo estilo/numeracion de lista (`numId=19`) que ya usaba el documento, para mantener coherencia visual. El archivo estuvo abierto en Word dos veces durante la sesion (bloqueo de escritura `PermissionError`) -- se le pidio al usuario cerrarlo antes de cada guardado.
+
+**No verificado:** no se reviso visualmente el `.docx` resultante en Word (solo se inspecciono texto/estilos via `python-docx`); revisar maquetacion, saltos de pagina y el indice de contenidos (que en Word es un campo y puede necesitar actualizarse manualmente con F9 al abrir el archivo).

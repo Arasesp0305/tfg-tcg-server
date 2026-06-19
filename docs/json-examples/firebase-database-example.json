@@ -1,0 +1,191 @@
+{
+  "users": {
+    "Uz7yw3OeFjhCS2z3masM4RWanxc2": {
+      "username": "TestPlayer",
+      "email": "test@test.es",
+      "coins": 0,
+      "mmr": 0,
+      "eloId": "bronze",
+      "selectedDeckId": "deck_001",
+      "createdAt": "2026-05-14T08:00:00Z",
+      "updatedAt": "2026-05-14T08:00:00Z",
+      "purchaseHistory": {
+        "purchase_001": {
+          "id": "purchase_001",
+          "itemId": "pack_basic_001",
+          "itemName": "Sobre basico",
+          "type": "PURCHASE",
+          "coinAmount": 100,
+          "balanceBefore": 500,
+          "balanceAfter": 400,
+          "description": "Compra de un sobre basico",
+          "createdAt": "2026-05-20T10:00:00Z",
+          "cardRewards": {
+            "card_fireball": 2,
+            "card_fire_dragon": 1
+          }
+        }
+      },
+      "cardCollection": {
+        "card_fireball": {
+          "cardId": "card_fireball",
+          "quantity": 2,
+          "firstObtainedAt": "2026-05-20T10:00:00Z",
+          "updatedAt": "2026-05-20T10:00:00Z"
+        },
+        "card_fire_dragon": {
+          "cardId": "card_fire_dragon",
+          "quantity": 1,
+          "firstObtainedAt": "2026-05-20T10:00:00Z",
+          "updatedAt": "2026-05-20T10:00:00Z"
+        }
+      },
+      "decks": {
+        "deck_001": {
+          "name": "Mazo inicial",
+          "playable": true,
+          "cards": {
+            "deck_card_001": {
+              "cardId": "card_fireball",
+              "quantity": 20
+            },
+            "deck_card_002": {
+              "cardId": "card_fire_dragon",
+              "quantity": 5
+            }
+          },
+          "cardCount": {
+            "action": 20,
+            "creature": 5,
+            "total": 25
+          }
+        }
+      }
+    }
+  },
+  "elos": {
+    "bronze": {
+      "name": "Bronce",
+      "mmrRequirement": 0,
+      "icon": "bronze.png"
+    }
+  },
+  "cards": {
+    "card_fire_dragon": {
+      "name": "Dragon de Fuego",
+      "type": "CREATURE",
+      "image": "cards/fire_dragon.png",
+      "text": "Criatura ofensiva con alto ataque.",
+      "stats": {
+        "attack": 5,
+        "health": 4,
+        "cost": 3,
+        "speed": 7
+      }
+    },
+    "card_fireball": {
+      "name": "Bola de Fuego",
+      "type": "ACTION",
+      "image": "cards/fireball.png",
+      "text": "Inflige 3 puntos de dano a una criatura.",
+      "effect": {
+        "target": "ENEMY_CREATURE",
+        "damage": 3,
+        "cost": 2
+      }
+    }
+  },
+  "games": {
+    "game_001": {
+      "status": "FINISHED",
+      "createdAt": "2026-05-14T08:10:00Z",
+      "startedAt": "2026-05-14T08:11:00Z",
+      "finishedAt": "2026-05-14T08:30:00Z",
+      "player1Id": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+      "player2Id": "otherFirebaseUid",
+      "currentTurnId": "turn_001",
+      "winnerId": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+      "players": {
+        "Uz7yw3OeFjhCS2z3masM4RWanxc2": {
+          "deckId": "deck_001",
+          "deadCreatures": 0
+        },
+        "otherFirebaseUid": {
+          "deckId": "deck_002",
+          "deadCreatures": 3
+        }
+      },
+      "creatureSelections": {
+        "Uz7yw3OeFjhCS2z3masM4RWanxc2": {
+          "activeCreatureCardIds": [
+            "card_fire_dragon",
+            "card_water_guardian"
+          ],
+          "hiddenCreatureCardId": "card_stone_titan",
+          "submittedAt": "2026-05-14T08:10:30Z"
+        },
+        "otherFirebaseUid": {
+          "activeCreatureCardIds": [
+            "card_shadow_wolf",
+            "card_ice_golem"
+          ],
+          "hiddenCreatureCardId": "card_leaf_beast",
+          "submittedAt": "2026-05-14T08:10:35Z"
+        }
+      },
+      "turns": {
+        "turn_001": {
+          "number": 1,
+          "startedAt": "2026-05-14T08:11:00Z",
+          "selectionDeadlineAt": "2026-05-14T08:12:30Z",
+          "endedAt": "2026-05-14T08:11:42Z",
+          "fieldCards": {
+            "field_001": {
+              "ownerId": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+              "cardId": "card_fire_dragon",
+              "currentHealth": 4,
+              "position": 1,
+              "visibility": "PUBLIC",
+              "status": "ACTIVE"
+            },
+            "field_003": {
+              "ownerId": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+              "cardId": "card_stone_titan",
+              "currentHealth": 8,
+              "position": 3,
+              "visibility": "HIDDEN",
+              "status": "BENCH"
+            }
+          },
+          "playerSelections": {
+            "Uz7yw3OeFjhCS2z3masM4RWanxc2": {
+              "submittedAt": "2026-05-14T08:11:20Z",
+              "actions": {
+                "action_001": {
+                  "playerId": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+                  "type": "PLAY_ACTION",
+                  "cardId": "card_fireball",
+                  "sourceFieldCardId": "field_001",
+                  "targetFieldCardId": "field_004",
+                  "createdAt": "2026-05-14T08:11:20Z"
+                }
+              }
+            }
+          },
+          "resolvedMoves": {
+            "resolved_move_001": {
+              "playerId": "Uz7yw3OeFjhCS2z3masM4RWanxc2",
+              "type": "PLAY_ACTION",
+              "cardId": "card_fireball",
+              "sourceFieldCardId": "field_001",
+              "targetFieldCardId": "field_004",
+              "speed": 7,
+              "resolvedOrder": 1,
+              "createdAt": "2026-05-14T08:11:20Z"
+            }
+          }
+        }
+      }
+    }
+  }
+}

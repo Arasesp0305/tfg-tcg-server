@@ -10,6 +10,10 @@ public class Move {
     private String createdAt;
     private int resolvedOrder;
     private int speed;
+    private Integer targetHealthBefore;
+    private Integer targetHealthAfter;
+    private String targetStatusBefore;
+    private String targetStatusAfter;
 
     public Move() {
     }
@@ -76,5 +80,37 @@ public class Move {
 
     public void setSpeed(int speed) {
         this.speed = speed;
+    }
+
+    public Integer getTargetHealthBefore() {
+        return targetHealthBefore;
+    }
+
+    public void setTargetHealthBefore(Integer targetHealthBefore) {
+        this.targetHealthBefore = targetHealthBefore;
+    }
+
+    public Integer getTargetHealthAfter() {
+        return targetHealthAfter;
+    }
+
+    public void setTargetHealthAfter(Integer targetHealthAfter) {
+        this.targetHealthAfter = targetHealthAfter;
+    }
+
+    public String getTargetStatusBefore() {
+        return targetStatusBefore;
+    }
+
+    public void setTargetStatusBefore(String targetStatusBefore) {
+        this.targetStatusBefore = targetStatusBefore;
+    }
+
+    public String getTargetStatusAfter() {
+        return targetStatusAfter;
+    }
+
+    public void setTargetStatusAfter(String targetStatusAfter) {
+        this.targetStatusAfter = targetStatusAfter;
     }
 }

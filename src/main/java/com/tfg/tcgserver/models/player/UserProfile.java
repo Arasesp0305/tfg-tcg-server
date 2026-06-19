@@ -7,6 +7,7 @@ public class UserProfile {
 
     private String username;
     private String email;
+    private String avatarId;
     private int coins;
     private int mmr;
     private String eloId;
@@ -34,6 +35,14 @@ public class UserProfile {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getAvatarId() {
+        return avatarId;
+    }
+
+    public void setAvatarId(String avatarId) {
+        this.avatarId = avatarId;
     }
 
     public int getCoins() {

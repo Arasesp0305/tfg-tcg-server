@@ -89,6 +89,27 @@ public class UserProfileRepository {
             PurchaseTransaction transaction,
             Map<String, Integer> cardRewards
     ) {
+        // La referencia aun no esta sincronizada localmente la primera vez que se usa:
+        // runTransaction invocaria doTransaction con currentData null aunque el perfil
+        // exista en el servidor. Forzamos una lectura previa para poblar la cache local
+        // antes de iniciar la transaccion (y devolver un error claro si de verdad no existe).
+        return findById(uid).thenCompose(profile -> {
+            if (profile == null) {
+                CompletableFuture<PurchaseTransaction> failed = new CompletableFuture<>();
+                failed.completeExceptionally(new IllegalArgumentException("No existe el perfil del usuario"));
+                return failed;
+            }
+
+            return runPurchaseTransaction(uid, transactionId, transaction, cardRewards);
+        });
+    }
+
+    private CompletableFuture<PurchaseTransaction> runPurchaseTransaction(
+            String uid,
+            String transactionId,
+            PurchaseTransaction transaction,
+            Map<String, Integer> cardRewards
+    ) {
         CompletableFuture<PurchaseTransaction> future = new CompletableFuture<>();
         AtomicReference<String> errorMessage = new AtomicReference<>();
 
